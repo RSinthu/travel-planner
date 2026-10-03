@@ -8,7 +8,6 @@ from tools import _geo
 FAKE_KEYS = {
     "LITEAPI_KEY": "test-liteapi-key",
     "GEOAPIFY_API_KEY": "test-geoapify-key",
-    "DUFFEL_ACCESS_TOKEN": "duffel_test_fake",
     "OPENTRIPMAP_API_KEY": "test-otm-key",
 }
 

@@ -5,7 +5,6 @@ from datetime import date
 
 from ._http import ToolError
 
-_IATA = re.compile(r"^[A-Za-z]{3}$")
 _COUNTRY = re.compile(r"^[A-Za-z]{2}$")
 _CURRENCY = re.compile(r"^[A-Za-z]{3}$")
 
@@ -32,11 +31,6 @@ def date_range(start: str, end: str, start_field: str, end_field: str, *, same_d
         raise ToolError(f"{end_field} must be after {start_field}.")
     return start_day, end_day
 
-
-def iata_code(value: str, field: str) -> str:
-    if not _IATA.match(value.strip()):
-        raise ToolError(f"{field} must be a 3-letter IATA airport or city code (e.g. 'CDG'), got '{value}'.")
-    return value.strip().upper()
 
 
 def country_code(value: str, *, required: bool) -> str:

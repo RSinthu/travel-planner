@@ -24,7 +24,8 @@ def calculate_trip_budget(
         nights: Number of nights (1-60).
         travellers: Number of people (1-20).
         hotel_total: Total hotel cost for the whole stay.
-        flights_total: Total flight cost for all travellers.
+        flights_total: Total flight cost for all travellers, if the user gives one
+            (the planner does not search flights). Leave 0 if unknown.
         activities_total: Total cost of tickets and activities.
         daily_spend_per_person: Estimated food and local transport per person per day.
         currency: 3-letter currency code of all the amounts.
