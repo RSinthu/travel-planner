@@ -3,12 +3,11 @@ from datetime import date, timedelta
 import pytest
 import respx
 
-from tools import _geo
+from tools import _geo, _geoapify
 
 FAKE_KEYS = {
     "LITEAPI_KEY": "test-liteapi-key",
     "GEOAPIFY_API_KEY": "test-geoapify-key",
-    "OPENTRIPMAP_API_KEY": "test-otm-key",
 }
 
 PARIS = {
@@ -48,4 +47,14 @@ def api():
 
 @pytest.fixture
 def paris_geocode(api):
+    """Open-Meteo geocoder (used by the weather tool)."""
     return api.get(url__startswith=_geo.GEOCODING_URL).respond(200, json={"results": [PARIS]})
+
+
+@pytest.fixture
+def paris_city_centre(api):
+    """Geoapify geocoder (used by the hotel-location and attraction tools)."""
+    return api.get(url__startswith=_geoapify.GEOAPIFY_GEOCODE_URL).respond(200, json={"results": [{
+        "city": "Paris", "country": "France", "country_code": "fr",
+        "lat": PARIS["latitude"], "lon": PARIS["longitude"], "timezone": {"name": "Europe/Paris"},
+    }]})

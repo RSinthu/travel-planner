@@ -4,12 +4,11 @@
 - find_hotels_near: hotel locations from Geoapify (free tier, no prices).
 """
 
-from ._geo import geocode_city
+from ._geoapify import geocode_city, search_places
 from ._http import ToolError, error, ok, request_json, require_env
 from ._validate import country_code as check_country, currency_code, date_range, int_between, number_between
 
 LITEAPI_RATES_URL = "https://api.liteapi.travel/v3.0/hotels/rates"
-GEOAPIFY_PLACES_URL = "https://api.geoapify.com/v2/places"
 
 LITEAPI_CANDIDATES = 50  # hotels requested from LiteAPI before filtering and sorting
 
@@ -145,35 +144,11 @@ async def find_hotels_near(city: str, country_code: str = "", radius_km: float =
         number_between(radius_km, 0.5, 30, "radius_km")
         int_between(max_results, 1, 50, "max_results")
         api_key = require_env("GEOAPIFY_API_KEY")
-        location = await geocode_city(city, check_country(country_code, required=False))
-        lon, lat = location["longitude"], location["latitude"]
+        location = await geocode_city(api_key, city, check_country(country_code, required=False))
 
-        payload = await request_json(
-            "GET",
-            GEOAPIFY_PLACES_URL,
-            service="Geoapify",
-            params={
-                "categories": "accommodation.hotel",
-                "filter": f"circle:{lon},{lat},{int(radius_km * 1000)}",
-                "bias": f"proximity:{lon},{lat}",
-                "limit": max_results,
-                "apiKey": api_key,
-            },
-        )
-        hotels = []
-        for feature in payload.get("features") or []:
-            props = feature.get("properties") or {}
-            if not props.get("name"):
-                continue
-            hotels.append({
-                "name": props["name"],
-                "address": props.get("formatted", ""),
-                "latitude": props.get("lat"),
-                "longitude": props.get("lon"),
-                "distance_m": props.get("distance"),
-                "website": props.get("website", ""),
-                "place_id": props.get("place_id", ""),
-            })
+        places = await search_places(api_key, "accommodation.hotel", location, radius_km, max_results)
+        fields = ("name", "address", "latitude", "longitude", "distance_m", "website", "place_id")
+        hotels = [{k: place[k] for k in fields} for place in places]
         return ok({"location": location, "hotels": hotels})
     except ToolError as exc:
         return error(str(exc))

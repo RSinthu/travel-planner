@@ -2,7 +2,8 @@ import json
 
 from tests.conftest import days_from_now
 from tools import find_hotels_near, search_hotels
-from tools.hotels import GEOAPIFY_PLACES_URL, LITEAPI_RATES_URL
+from tools._geoapify import GEOAPIFY_PLACES_URL
+from tools.hotels import LITEAPI_RATES_URL
 
 
 def rate(amount, name="Double Room", refundable=True):
@@ -88,7 +89,7 @@ async def test_search_hotels_api_rejection_is_explained(api):
     assert "test-liteapi-key" not in result["error_message"]
 
 
-async def test_find_hotels_near(api, paris_geocode):
+async def test_find_hotels_near(api, paris_city_centre):
     route = api.get(url__startswith=GEOAPIFY_PLACES_URL).respond(200, json={
         "type": "FeatureCollection",
         "features": [
