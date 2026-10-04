@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import re
 from typing import Any
 
 import httpx
@@ -11,6 +12,23 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 15.0
 RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+_SECRET_PARAM = re.compile(r"(?i)\b(api_?key|key|token|access_token)=[^&\s\"']+")
+
+
+class _RedactSecrets(logging.Filter):
+    """httpx logs every request URL at INFO level. Some APIs (Geoapify) take the
+    key as a URL parameter, so hide its value before the line is written."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        redacted = _SECRET_PARAM.sub(r"\1=REDACTED", message)
+        if redacted != message:
+            record.msg, record.args = redacted, ()
+        return True
+
+
+logging.getLogger("httpx").addFilter(_RedactSecrets())
 
 
 class ToolError(Exception):

@@ -107,3 +107,11 @@ async def test_find_hotels_near(api, paris_city_centre):
     params = route.calls.last.request.url.params
     assert params["filter"] == "circle:2.3488,48.85341,2000"
     assert params["categories"] == "accommodation.hotel"
+
+
+async def test_search_hotels_flags_sandbox_prices(api):
+    api.post(LITEAPI_RATES_URL).respond(200, json={**LITEAPI_RESPONSE, "sandbox": True})
+
+    result = await search_hotels("Paris", "FR", days_from_now(30), days_from_now(33))
+
+    assert "sandbox" in result["note"]

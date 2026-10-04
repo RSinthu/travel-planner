@@ -1,1 +1,1 @@
-"""research_team (parallel), planning_pipeline (sequential), review_loop (loop)."""
+"""Step 5: itinerary planner and review loop (not built yet)."""

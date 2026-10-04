@@ -1,1 +1,23 @@
-"""Root agent: travel_coordinator (exposed as root_agent)."""
+"""Root agent, exposed as root_agent for `adk web`.
+
+travel_coordinator chats with the user and calls three single-turn specialist
+sub-agents. ADK turns each single_turn sub-agent into a tool on the coordinator,
+so the coordinator keeps the conversation and can call all three at once.
+"""
+
+from google.adk.agents import Agent
+
+from .callbacks import limit_specialist_calls, remember_trip_request
+from .models import COORDINATOR_MODEL, gemini
+from .prompts import coordinator_instruction
+from .sub_agents import hotel_agent, places_agent, weather_agent
+
+root_agent = Agent(
+    name="travel_coordinator",
+    model=gemini(COORDINATOR_MODEL),
+    description="Plans trips: talks with the traveller and gathers weather, hotels and things to do.",
+    instruction=coordinator_instruction,
+    sub_agents=[weather_agent, hotel_agent, places_agent],
+    before_tool_callback=limit_specialist_calls,
+    after_tool_callback=remember_trip_request,
+)

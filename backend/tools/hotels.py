@@ -42,6 +42,7 @@ async def search_hotels(
         "hotels": [{"hotel_id", "name", "address", "stars", "rating", "photo_url",
         "room_name", "board", "refundable", "total_price", "price_per_night",
         "offer_id"}, ...]}}. An empty hotels list means nothing matched.
+        With a sandbox key the result also has a "note" saying prices are test data.
         On failure: {"status": "error", "error_message": "..."}.
     """
     try:
@@ -82,7 +83,10 @@ async def search_hotels(
         if max_price_per_night > 0:
             hotels = [h for h in hotels if h["price_per_night"] <= max_price_per_night]
         hotels.sort(key=lambda h: h["total_price"])
-        return ok({"nights": nights, "currency": currency, "hotels": hotels[:max_results]})
+        extra = {}
+        if payload.get("sandbox"):
+            extra["note"] = "LiteAPI sandbox: test prices for development, not real bookable rates."
+        return ok({"nights": nights, "currency": currency, "hotels": hotels[:max_results]}, **extra)
     except ToolError as exc:
         return error(str(exc))
 

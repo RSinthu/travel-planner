@@ -1,3 +1,5 @@
+import logging
+
 import httpx
 import pytest
 
@@ -29,3 +31,13 @@ async def test_timeouts_reported_without_url_or_key(api):
         await request_json("GET", URL, service="Example", params={"apiKey": "secret"}, retries=1)
     assert "timed out" in str(info.value)
     assert "secret" not in str(info.value) and "example.com" not in str(info.value)
+
+
+def test_api_keys_are_hidden_in_httpx_logs(caplog):
+    url = httpx.URL("https://api.geoapify.com/v2/places?categories=x&apiKey=secret123&limit=5")
+
+    with caplog.at_level("INFO", logger="httpx"):
+        logging.getLogger("httpx").info('HTTP Request: %s %s "%s"', "GET", url, "HTTP/1.1 200 OK")
+
+    assert "secret123" not in caplog.text
+    assert "apiKey=REDACTED&limit=5" in caplog.text

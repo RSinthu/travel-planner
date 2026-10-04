@@ -8,3 +8,30 @@ Multi-agent travel planner built with Google ADK, FastAPI and Next.js.
 - `frontend/` - Next.js + CopilotKit UI
 
 Place and attraction data comes from Geoapify: any page that shows it must display "Powered by Geoapify" (free-plan terms).
+
+## Run the agent (development)
+
+From `backend/`, with `backend/.env` filled in (see `.env.example`):
+
+```bash
+py -3.13 -m venv .venv
+.venv/Scripts/python -m pip install -r requirements-dev.txt
+.venv/Scripts/python -m pytest -q
+.venv/Scripts/adk web --port 8000 .
+```
+
+Then open http://localhost:8000 and pick `travel_agent`. `adk web` is for development only.
+On Windows it does not auto-reload: restart it after changing code.
+
+## Agents
+
+```
+travel_coordinator  (chats with the user, gemini-3.5-flash)
+ ├─ weather_agent   single_turn → get_weather_forecast        (Open-Meteo)
+ ├─ hotel_agent     single_turn → search_hotels, find_hotels_near (LiteAPI, Geoapify)
+ └─ places_agent    single_turn → find_attractions            (Geoapify)
+```
+
+The coordinator calls the specialists like tools (in parallel), each with the same `TripRequest`.
+Raw tool data is kept in session state: `trip_request`, `weather`, `hotels`, `hotels_nearby`, `attractions`.
+One planning message uses about 8 Gemini requests; the Gemini free tier allows only ~20 per model per day.
