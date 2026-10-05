@@ -27,11 +27,17 @@ On Windows it does not auto-reload: restart it after changing code.
 
 ```
 travel_coordinator  (chats with the user, gemini-3.5-flash)
- ├─ weather_agent   single_turn → get_weather_forecast        (Open-Meteo)
- ├─ hotel_agent     single_turn → search_hotels, find_hotels_near (LiteAPI, Geoapify)
- └─ places_agent    single_turn → find_attractions            (Geoapify)
+ ├─ weather_agent   single_turn → get_weather_forecast             (Open-Meteo)
+ ├─ hotel_agent     single_turn → search_hotels, find_hotels_near  (LiteAPI, Geoapify)
+ ├─ places_agent    single_turn → find_attractions                 (Geoapify)
+ └─ plan_itinerary  tool → itinerary_agent (structured plan) → review (code) → one fix if needed
 ```
 
-The coordinator calls the specialists like tools (in parallel), each with the same `TripRequest`.
-Raw tool data is kept in session state: `trip_request`, `weather`, `hotels`, `hotels_nearby`, `attractions`.
-One planning message uses about 8 Gemini requests; the Gemini free tier allows only ~20 per model per day.
+1. The coordinator calls the three specialists in parallel, each with the same `TripRequest`.
+2. Their raw tool data is kept in session state: `trip_request`, `weather`, `hotels`, `hotels_nearby`, `attractions`.
+3. `plan_itinerary` runs the itinerary agent on that data and checks the plan in Python
+   (`travel_agent/review.py`): exact dates, only searched places and hotels, total budget.
+   Errors go back to the agent once; rainy-day and repeat warnings are passed to the user.
+   The result is saved as `itinerary` and `itinerary_review`.
+
+One full planning message uses about 10 Gemini requests; the free tier allows only ~20 per model per day.

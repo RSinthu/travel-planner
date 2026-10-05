@@ -26,6 +26,9 @@ TOOL_STATE_KEYS = {
 
 SPECIALIST_NAMES = {"weather_agent", "hotel_agent", "places_agent"}
 
+# Tools the coordinator may call only once per user message.
+ONCE_PER_MESSAGE = SPECIALIST_NAMES | {"plan_itinerary"}
+
 
 def save_tool_data(
     tool: BaseTool, args: dict[str, Any], tool_context: ToolContext, tool_response: Any
@@ -44,22 +47,22 @@ def save_tool_data(
     return None  # keep the tool's response unchanged
 
 
-def limit_specialist_calls(tool: BaseTool, args: dict[str, Any], tool_context: ToolContext) -> dict | None:
-    """before_tool_callback for the coordinator: each specialist at most once per user message.
+def limit_repeat_calls(tool: BaseTool, args: dict[str, Any], tool_context: ToolContext) -> dict | None:
+    """before_tool_callback for the coordinator: specialists and plan_itinerary at most once per user message.
 
-    Every specialist call costs several Gemini requests, and the free tier allows
+    Each of these calls costs several Gemini requests, and the free tier allows
     only about 20 a day per model, so a retry loop would burn it in one message.
     """
-    if tool.name not in SPECIALIST_NAMES:
+    if tool.name not in ONCE_PER_MESSAGE:
         return None
-    calls = tool_context.state.get("temp:specialist_calls") or {}
+    calls = tool_context.state.get("temp:calls_this_message") or {}
     called = calls.get("names", []) if calls.get("invocation") == tool_context.invocation_id else []
     if tool.name in called:
         return {
             "error": f"{tool.name} was already called for this message. "
             "Use its earlier answer; if it was empty or failed, tell the user that part is unavailable."
         }
-    tool_context.state["temp:specialist_calls"] = {
+    tool_context.state["temp:calls_this_message"] = {
         "invocation": tool_context.invocation_id,
         "names": [*called, tool.name],
     }

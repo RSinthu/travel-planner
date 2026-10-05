@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from google.adk.flows.llm_flows.extensions._agent_transfer import _get_transfer_targets
 
 from travel_agent.agent import root_agent
-from travel_agent.callbacks import limit_specialist_calls, remember_trip_request, save_tool_data
+from travel_agent.callbacks import limit_repeat_calls, remember_trip_request, save_tool_data
 from travel_agent.prompts import coordinator_instruction
 from travel_agent.schemas import TripRequest
 
@@ -31,6 +31,11 @@ def test_coordinator_has_three_single_turn_specialists():
         assert agent.mode == "single_turn"
         assert agent.input_schema is TripRequest
         assert {t.__name__ for t in agent.tools} == SPECIALIST_TOOLS[name]
+
+
+def test_coordinator_has_plan_itinerary_tool():
+    names = {getattr(t, "__name__", getattr(t, "name", None)) for t in root_agent.tools}
+    assert "plan_itinerary" in names
 
 
 def test_specialists_cannot_transfer_away():
@@ -70,19 +75,25 @@ def test_save_tool_data_ignores_other_tools():
 def test_each_specialist_called_once_per_message():
     ctx = context("inv-1")
 
-    assert limit_specialist_calls(tool("hotel_agent"), {}, ctx) is None
-    assert limit_specialist_calls(tool("weather_agent"), {}, ctx) is None
-    blocked = limit_specialist_calls(tool("hotel_agent"), {}, ctx)
+    assert limit_repeat_calls(tool("hotel_agent"), {}, ctx) is None
+    assert limit_repeat_calls(tool("weather_agent"), {}, ctx) is None
+    blocked = limit_repeat_calls(tool("hotel_agent"), {}, ctx)
     assert "already called" in blocked["error"]
 
     ctx.invocation_id = "inv-2"  # next user message
-    assert limit_specialist_calls(tool("hotel_agent"), {}, ctx) is None
+    assert limit_repeat_calls(tool("hotel_agent"), {}, ctx) is None
+
+
+def test_plan_itinerary_limited_to_once_per_message():
+    ctx = context()
+    assert limit_repeat_calls(tool("plan_itinerary"), {}, ctx) is None
+    assert "already called" in limit_repeat_calls(tool("plan_itinerary"), {}, ctx)["error"]
 
 
 def test_call_limit_ignores_non_specialist_tools():
     ctx = context()
-    assert limit_specialist_calls(tool("transfer_to_agent"), {}, ctx) is None
-    assert limit_specialist_calls(tool("transfer_to_agent"), {}, ctx) is None
+    assert limit_repeat_calls(tool("transfer_to_agent"), {}, ctx) is None
+    assert limit_repeat_calls(tool("transfer_to_agent"), {}, ctx) is None
 
 
 def test_remember_trip_request():
