@@ -5,7 +5,7 @@ from typing import Callable
 from google.adk.agents import Agent
 
 from ..callbacks import save_tool_data
-from ..models import SPECIALIST_MODEL, gemini
+from ..models import specialist_model
 from ..schemas import TripRequest
 
 
@@ -18,7 +18,7 @@ def specialist(name: str, description: str, instruction: Callable, tools: list) 
     """
     return Agent(
         name=name,
-        model=gemini(SPECIALIST_MODEL),
+        model=specialist_model(),
         mode="single_turn",
         description=description,
         instruction=instruction,

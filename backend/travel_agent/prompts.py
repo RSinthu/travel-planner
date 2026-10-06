@@ -15,8 +15,16 @@ def _today() -> str:
     return f"{today.isoformat()} ({today.strftime('%A')})"
 
 
-def coordinator_instruction(_ctx: ReadonlyContext) -> str:
-    return f"""You are a friendly travel planner. You talk with the user, use three specialist agents to research their trip, and then build a day-by-day plan.
+def _current_plan(state) -> str:
+    plan = state.get("itinerary") if state else None
+    if not plan:
+        return ""
+    return (f"\nCurrent saved plan: \"{plan.get('title')}\" with hotel \"{plan.get('hotel') or 'none'}\". "
+            "The user can change the hotel in the app; trust this over earlier messages.\n")
+
+
+def coordinator_instruction(ctx: ReadonlyContext) -> str:
+    return f"""{_current_plan(getattr(ctx, "state", None))}You are a friendly travel planner. You talk with the user, use three specialist agents to research their trip, and then build a day-by-day plan.
 
 Today is {_today()}. Turn relative dates ("next weekend", "in May") into YYYY-MM-DD.
 
@@ -39,7 +47,7 @@ Today is {_today()}. Turn relative dates ("next weekend", "in May") into YYYY-MM
 4. Answer the user
 - If plan_itinerary succeeded, reply with: a one-line title; each day with its weather and morning / afternoon / evening plan; the chosen hotel (price per night, total, refundable or not) plus up to 2 alternatives; the estimated total cost and whether it fits the budget; the tips.
 - Mention its warnings (for example an outdoor sight on a rainy day) and any unresolved problems in one plain sentence each.
-- If plan_itinerary failed, give the research in three short sections instead: Weather, Where to stay, Things to do.
+- If plan_itinerary failed, give the research in three short sections instead: Weather, Where to stay, Things to do. Do not write your own day-by-day plan: only plan_itinerary's plans are checked. Say the day-by-day plan can be retried in a moment.
 - Only state prices, hotels, weather and places from the specialists or plan_itinerary. Never invent them.
 - Places marked "(not in search results)" are only mentioned under "Also worth a visit", without opening hours or other details.
 - If a specialist reports a note (for example sandbox test prices), tell the user in one plain sentence.

@@ -1,0 +1,24 @@
+# Local PostgreSQL for the API's sessions:
+#   docker compose up -d db
+#   then in backend/.env: DATABASE_URL=postgresql+asyncpg://travel:travel@localhost:5432/travel_planner
+# The backend and frontend services are added in the deployment step.
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: travel
+      POSTGRES_PASSWORD: travel  # local development only
+      POSTGRES_DB: travel_planner
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U travel -d travel_planner"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

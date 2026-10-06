@@ -26,7 +26,8 @@ LITEAPI_RESPONSE = {
     ],
     "hotels": [
         {"id": "h1", "name": "Grand Hotel", "address": "1 Rue A", "stars": 5, "rating": 9.1, "main_photo": "p1.jpg"},
-        {"id": "h2", "name": "Budget Inn", "address": "2 Rue B", "stars": 3, "rating": 8.0, "main_photo": "p2.jpg"},
+        {"id": "h2", "name": "Budget Inn", "address": "2 Rue B", "stars": 3, "rating": 8.0, "main_photo": "p2.jpg",
+         "thumbnail": "t2.jpg", "review_count": 120, "latitude": 48.85, "longitude": 2.35},
     ],
 }
 
@@ -46,6 +47,8 @@ async def test_search_hotels_returns_cheapest_first(api):
     assert budget["price_per_night"] == 150.0
     assert budget["offer_id"] == "o2b"
     assert budget["refundable"] is True
+    assert (budget["latitude"], budget["longitude"], budget["thumbnail_url"], budget["review_count"]) == (
+        48.85, 2.35, "t2.jpg", 120)
 
     request = route.calls.last.request
     assert request.headers["X-API-Key"] == "test-liteapi-key"

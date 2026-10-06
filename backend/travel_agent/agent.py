@@ -9,14 +9,14 @@ Then plan_itinerary turns their research into a checked day-by-day plan.
 from google.adk.agents import Agent
 
 from .callbacks import limit_repeat_calls, remember_trip_request
-from .models import COORDINATOR_MODEL, gemini
+from .models import coordinator_model
 from .prompts import coordinator_instruction
 from .sub_agents import hotel_agent, places_agent, weather_agent
 from .workflows import plan_itinerary
 
 root_agent = Agent(
     name="travel_coordinator",
-    model=gemini(COORDINATOR_MODEL),
+    model=coordinator_model(),
     description="Plans trips: talks with the traveller, gathers weather, hotels and things to do, and builds a day-by-day plan.",
     instruction=coordinator_instruction,
     tools=[plan_itinerary],

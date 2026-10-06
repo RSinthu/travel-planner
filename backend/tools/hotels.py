@@ -39,9 +39,9 @@ async def search_hotels(
 
     Returns:
         On success: {"status": "success", "data": {"nights": int, "currency": str,
-        "hotels": [{"hotel_id", "name", "address", "stars", "rating", "photo_url",
-        "room_name", "board", "refundable", "total_price", "price_per_night",
-        "offer_id"}, ...]}}. An empty hotels list means nothing matched.
+        "hotels": [{"hotel_id", "name", "address", "stars", "rating", "review_count",
+        "latitude", "longitude", "photo_url", "thumbnail_url", "room_name", "board",
+        "refundable", "total_price", "price_per_night", "offer_id"}, ...]}}. An empty hotels list means nothing matched.
         With a sandbox key the result also has a "note" saying prices are test data.
         On failure: {"status": "error", "error_message": "..."}.
     """
@@ -116,7 +116,11 @@ def _cheapest_offers(payload: dict, nights: int) -> list[dict]:
             "address": hotel.get("address", ""),
             "stars": hotel.get("stars"),
             "rating": hotel.get("rating"),
+            "review_count": hotel.get("review_count"),
+            "latitude": hotel.get("latitude"),
+            "longitude": hotel.get("longitude"),
             "photo_url": hotel.get("main_photo", ""),
+            "thumbnail_url": hotel.get("thumbnail", ""),
             "room_name": rate.get("name", ""),
             "board": rate.get("boardName", ""),
             "refundable": (rate.get("cancellationPolicies") or {}).get("refundableTag") == "RFN",

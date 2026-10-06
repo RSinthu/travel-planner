@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 15.0
 RETRY_STATUSES = {429, 500, 502, 503, 504}
+_sleep = asyncio.sleep  # the tests replace this to skip retry waits
 
 _SECRET_PARAM = re.compile(r"(?i)\b(api_?key|key|token|access_token)=[^&\s\"']+")
 
@@ -117,6 +118,6 @@ async def request_json(
 
         if attempt < retries:
             logger.warning("%s call failed (%s), retrying", service, last_problem)
-            await asyncio.sleep(0.5 * 2**attempt)
+            await _sleep(0.5 * 2**attempt)
 
     raise ToolError(f"{service} is unavailable right now: {last_problem}.")

@@ -7,3 +7,4 @@ node_modules/
 .next/
 .pytest_cache/
 .adk/
+backend/travel_planner.db*

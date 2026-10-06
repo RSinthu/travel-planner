@@ -35,7 +35,7 @@ def no_retry_wait(monkeypatch):
     async def instant(_seconds):
         return None
 
-    monkeypatch.setattr("tools._http.asyncio.sleep", instant)
+    monkeypatch.setattr("tools._http._sleep", instant)  # only the tools' retry waits, not asyncio itself
 
 
 @pytest.fixture

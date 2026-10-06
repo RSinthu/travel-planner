@@ -7,13 +7,13 @@ It reads the research from session state through its instruction.
 
 from google.adk.agents import Agent
 
-from ..models import COORDINATOR_MODEL, gemini
+from ..models import planner_model
 from ..prompts import itinerary_instruction
 from ..schemas import Itinerary
 
 itinerary_agent = Agent(
     name="itinerary_agent",
-    model=gemini(COORDINATOR_MODEL),  # planning needs the stronger model
+    model=planner_model(),  # stronger models first, the lighter one as a last resort
     mode="single_turn",
     description="Turns the trip research into a day-by-day itinerary.",
     instruction=itinerary_instruction,

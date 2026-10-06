@@ -11,6 +11,7 @@ from typing import Any
 from google.adk.tools.tool_context import ToolContext
 from pydantic import BaseModel, ValidationError
 
+from .plan_updates import enrich_itinerary
 from .review import review_itinerary
 from .schemas import Itinerary
 from .sub_agents.itinerary_agent import itinerary_agent
@@ -59,7 +60,9 @@ async def plan_itinerary(tool_context: ToolContext) -> dict:
         return {"status": "error", "error_message": "The itinerary planner did not return a valid plan."}
 
     plan = itinerary.model_dump()
-    tool_context.state["itinerary"] = plan
+    # State gets the enriched plan (coordinates etc. for the app); the model gets the
+    # plain one, which is all it needs and costs fewer tokens.
+    tool_context.state["itinerary"] = enrich_itinerary(plan, state)
     tool_context.state["itinerary_review"] = review
     return {
         "status": "success",
