@@ -1,100 +1,344 @@
-# Travel Planner
+# 🌍 Travel Planner
 
-Multi-agent travel planner built with Google ADK, FastAPI and Next.js.
+> An AI-powered, multi-agent travel planning application built with **Google ADK**, **FastAPI**, and **Next.js**.
 
-- `backend/travel_agent/` - ADK agents (run `adk web` from `backend/` to test)
-- `backend/tools/` - API tools (Open-Meteo, LiteAPI, Geoapify)
-- `backend/app/` - FastAPI server
-- `frontend/` - Next.js 16 app: sign-in, trip chat with live progress, plan, map, hotels, budget
+---
 
-Place and attraction data comes from Geoapify: any page that shows it must display "Powered by Geoapify" (free-plan terms).
+## ✈️ What It Does
 
-## Run the agent (development)
+Travel Planner is a full-stack conversational travel assistant. You describe a trip — destination, dates, budget, and interests — and a coordinated team of AI agents researches real weather forecasts, live hotel availability, and local attractions, then builds a validated day-by-day itinerary.
 
-From `backend/`, with `backend/.env` filled in (see `.env.example`):
-
-```bash
-py -3.13 -m venv .venv
-.venv/Scripts/python -m pip install -r requirements-dev.txt
-.venv/Scripts/python -m pytest -q
-.venv/Scripts/adk web --port 8000 .
-```
-
-Then open http://localhost:8000 and pick `travel_agent`. `adk web` is for development only.
-On Windows it does not auto-reload: restart it after changing code.
-
-## Run the API (FastAPI)
-
-From `backend/`:
-
-```bash
-.venv/Scripts/uvicorn app.main:app --port 8080
-```
-
-- Sessions are stored in the database from `DATABASE_URL`: empty = SQLite file `backend/travel_planner.db`.
-  For PostgreSQL: `docker compose up -d db` (from the project root), then
-  `DATABASE_URL=postgresql+asyncpg://travel:travel@localhost:5432/travel_planner`.
-  The server checks the database at startup and stops with a clear message if it cannot connect.
-- Interactive docs: http://localhost:8080/docs (development only).
-
-| Method | Path | |
+| Part | Technology | Purpose |
 |---|---|---|
-| GET | `/api/health`, `/api/health/ready` | liveness / database check |
-| POST | `/api/auth/dev-token` | `{"user_id": "alice"}` → token (development only) |
-| POST | `/api/trips` | start a trip (conversation) |
-| GET | `/api/trips` | your trips, newest first |
-| GET | `/api/trips/{id}` | messages + saved trip data (itinerary, hotels, weather, ...) |
-| DELETE | `/api/trips/{id}` | delete a trip |
-| POST | `/api/trips/{id}/messages` | `{"text": "..."}` → Server-Sent Events stream |
+| **Backend** | Python · Google ADK · FastAPI | AI agents + REST API |
+| **Frontend** | Next.js 16 · React 19 · TypeScript | Web UI with auth, chat, map, hotels, budget |
 
-All `/api/trips` calls need `Authorization: Bearer <token>`; the token's `sub` is the user id.
-The message stream sends `progress` (a specialist or the planner started), `message` (the reply),
-`trip` (trip data that changed), then `done` or `error` (`ai_unavailable`, `ai_quota_exceeded`, ...).
-Errors elsewhere are JSON: `{"error": {"code": "...", "message": "..."}}`.
+---
 
-Limits (see `.env.example`): 5 messages per user per minute and 40 per day, 2000 characters per message,
-one message at a time per trip (409 otherwise), 30 model calls per message.
-If a Gemini model is overloaded (503) or out of quota (429), the agents fall back to the next model
-(`TRAVEL_AGENT_FALLBACK_MODELS`, `TRAVEL_SPECIALIST_FALLBACK_MODELS`).
+## 🤖 Google ADK — What It Is and How It's Used Here
 
-## Run the whole app
+### What is Google ADK?
 
-1. Backend: in `backend/.env` set `AUTH_JWKS_URL=http://localhost:3000/api/auth/jwks` (see `.env.example`), then
-   from `backend/`: `.venv/Scripts/uvicorn app.main:app --port 8080`
-2. Frontend, from `frontend/` (first time: `npm install`, copy `.env.example` to `.env.local` and set
-   `BETTER_AUTH_SECRET`, then create the accounts tables with `npx auth@latest migrate --config lib/auth.ts -y`):
+**Google Agent Development Kit (ADK)** is an open-source Python framework from Google DeepMind for building, running, and orchestrating AI agents powered by Gemini models. Key concepts:
+
+| Concept | Description |
+|---|---|
+| **Agent** | An LLM with a name, instruction, and a set of tools or sub-agents it can call |
+| **Sub-agent** | An agent invoked by a parent agent — ADK automatically wraps it as a callable tool |
+| **`single_turn`** | A sub-agent that runs once per invocation, returns its result, and exits |
+| **Tool** | A Python function the agent can call (API calls, code, structured workflows) |
+| **Session state** | A key-value store shared across all agents in a conversation turn |
+| **Callback** | A hook (`before_tool_callback`, `after_tool_callback`) to intercept tool calls |
+| **`adk web`** | A built-in local dev UI for chatting with your agent during development |
+| **`google-adk[db]`** | The `[db]` extra adds SQLite/PostgreSQL session persistence |
+
+ADK handles routing between agents, tool-call serialisation, model fallback, and session management — you write plain Python with no custom prompt scaffolding required.
+
+### How This Project Uses ADK
+
+```
+travel_coordinator          (root_agent · Gemini Flash · chats with the user)
+ ├─ weather_agent           single_turn → get_weather_forecast          (Open-Meteo, free)
+ ├─ hotel_agent             single_turn → search_hotels, find_hotels_near (LiteAPI + Geoapify)
+ ├─ places_agent            single_turn → find_attractions              (Geoapify)
+ └─ plan_itinerary          Python tool → itinerary_agent (structured JSON plan)
+                                        → review.py (Python validator)
+                                        → one AI fix pass if the plan has errors
+```
+
+**Step-by-step flow:**
+
+1. The user sends a message to `travel_coordinator`.
+2. As soon as the coordinator knows the destination and dates, it calls **all three specialist sub-agents in parallel** (same turn), each receiving a `TripRequest`.
+3. Each specialist calls its external API tool(s) and stores results in **shared session state** (`weather`, `hotels`, `attractions`).
+4. The coordinator calls `plan_itinerary` — a Python tool that invokes `itinerary_agent` to produce a structured JSON plan, then validates it with `review.py` (exact dates, only hotels/places from search results, budget). If there are errors, the itinerary agent gets one more fix pass.
+5. The coordinator presents the validated plan (with warnings, hotel options, and budget) to the user.
+
+**Key ADK features used:**
+
+- `Agent` with `sub_agents=` — ADK auto-wraps each sub-agent as a tool for the coordinator
+- `before_tool_callback` — enforces a per-message call limit to prevent runaway loops
+- `after_tool_callback` — extracts the `TripRequest` from any specialist call and saves it to session state
+- Instruction functions (not strings) — so each turn sees today's live date
+- `google-adk[db]` — persists sessions to SQLite (dev) or PostgreSQL (production)
+- `adk web` — interactive development UI to chat with the agent without any frontend
+
+---
+
+## 📁 Project Structure
+
+```
+Travel_Planner/
+├── backend/
+│   ├── travel_agent/          # ADK agent definitions
+│   │   ├── agent.py           # root_agent (travel_coordinator)
+│   │   ├── prompts.py         # instruction functions for all agents
+│   │   ├── models.py          # Gemini model selection + fallback logic
+│   │   ├── callbacks.py       # before/after tool callbacks
+│   │   ├── workflows.py       # plan_itinerary tool (orchestrates itinerary agent + review)
+│   │   ├── review.py          # Python itinerary validator
+│   │   ├── schemas.py         # Pydantic models (TripRequest, ItineraryDay, …)
+│   │   ├── plan_updates.py    # SSE progress event helpers
+│   │   └── sub_agents/
+│   │       ├── weather_agent.py
+│   │       ├── hotel_agent.py
+│   │       ├── places_agent.py
+│   │       └── itinerary_agent.py
+│   ├── tools/                 # External API wrappers
+│   │   ├── weather.py         # Open-Meteo (no key required)
+│   │   ├── hotels.py          # LiteAPI hotel search
+│   │   ├── places.py          # Geoapify attractions
+│   │   └── budget.py          # Budget calculation helpers
+│   ├── app/                   # FastAPI server
+│   │   ├── main.py            # App factory, CORS, startup checks
+│   │   ├── auth.py            # JWT verification (Better Auth EdDSA tokens)
+│   │   ├── config.py          # Settings (pydantic-settings, .env)
+│   │   ├── routes/            # /api/trips, /api/auth, /api/health
+│   │   └── services/          # ADK session runner, trip persistence
+│   ├── evals/                 # Agent evaluation scripts
+│   ├── tests/                 # Pytest test suite
+│   ├── requirements.txt
+│   ├── requirements-dev.txt
+│   ├── Dockerfile
+│   └── .env.example
+├── frontend/
+│   ├── app/                   # Next.js App Router pages
+│   ├── components/
+│   │   ├── auth/              # Sign-in / sign-up forms (Better Auth)
+│   │   ├── chat/              # Trip chat with live SSE progress stream
+│   │   ├── plan/              # Day-by-day itinerary view
+│   │   ├── map/               # MapLibre GL interactive map
+│   │   ├── hotels/            # Hotel picker (PATCH itinerary)
+│   │   └── budget/            # Budget breakdown
+│   ├── lib/                   # Auth client, API client, utilities
+│   ├── hooks/                 # React Query hooks
+│   └── .env.example
+└── docker-compose.yml         # Local PostgreSQL (optional)
+```
+
+---
+
+## 🛠️ Tech Stack
+
+### Backend
+
+| Library | Version | Role |
+|---|---|---|
+| `google-adk[db]` | ≥ 2.11 | Agent orchestration, session management |
+| `fastapi` + `uvicorn` | latest | REST API server |
+| `pydantic-settings` | ≥ 2.15 | Config from `.env` |
+| `PyJWT` | ≥ 2.15 | JWT token verification |
+| `httpx` | ≥ 0.28 | Async HTTP client for external APIs |
+| `asyncpg` | ≥ 0.31 | Async PostgreSQL driver |
+| SQLite (built-in) | — | Default local session store |
+
+### Frontend
+
+| Library | Role |
+|---|---|
+| Next.js 16 + React 19 + TypeScript | App framework |
+| Better Auth | Email/password auth, EdDSA JWT tokens |
+| TanStack Query v5 | Server state, caching |
+| MapLibre GL + react-map-gl | Interactive map (OpenFreeMap tiles, free) |
+| Tailwind CSS v4 | Styling |
+| `eventsource-parser` | Streaming SSE from the API |
+
+### External APIs
+
+| API | What It Provides | Key Required |
+|---|---|---|
+| Google Gemini (via ADK) | LLM for all agents | `GOOGLE_API_KEY` |
+| Open-Meteo | 7-day weather forecast | ❌ Free, no key |
+| LiteAPI | Live hotel search & pricing | `LITEAPI_KEY` |
+| Geoapify | Attractions, POI data, geocoding | `GEOAPIFY_API_KEY` |
+
+> **Attribution**: Any page displaying place or attraction data from Geoapify **must** show "Powered by Geoapify" (free-plan terms).
+
+---
+
+## ⚙️ Environment Variables
+
+### Backend (`backend/.env`)
+
+```env
+# Gemini
+GOOGLE_API_KEY=your_key_here
+GOOGLE_GENAI_USE_VERTEXAI=FALSE
+
+# Optional model overrides (defaults: gemini-3.5-flash / gemini-3.5-flash-lite)
+TRAVEL_AGENT_MODEL=
+TRAVEL_SPECIALIST_MODEL=
+# Fallback models tried in order on 503/429 (comma-separated)
+TRAVEL_AGENT_FALLBACK_MODELS=
+TRAVEL_SPECIALIST_FALLBACK_MODELS=
+
+# Travel APIs
+LITEAPI_KEY=your_key_here
+GEOAPIFY_API_KEY=your_key_here
+
+# API server
+APP_ENV=development          # enables /docs and POST /api/auth/dev-token
+DATABASE_URL=                # empty = SQLite; or postgresql+asyncpg://...
+AUTH_JWKS_URL=http://localhost:3000/api/auth/jwks
+AUTH_ISSUER=http://localhost:3000
+AUTH_AUDIENCE=travel-planner-api
+JWT_SECRET=                  # ≥32 chars; empty in dev uses a temporary secret
+CORS_ORIGINS=http://localhost:3000
+
+# Rate limits (per user)
+RATE_LIMIT_PER_MINUTE=5
+RATE_LIMIT_PER_DAY=40
+```
+
+### Frontend (`frontend/.env.local`)
+
+```env
+BETTER_AUTH_SECRET=your_secret_here      # ≥32 random chars
+BETTER_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:8080
+```
+
+---
+
+## 🚀 Running Locally
+
+### Option A — Agent Only (ADK Dev UI)
+
+Use this to test the agent without the frontend.
 
 ```bash
+cd backend
+py -3.13 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-dev.txt
+
+copy .env.example .env   # fill in GOOGLE_API_KEY, LITEAPI_KEY, GEOAPIFY_API_KEY
+
+.venv\Scripts\python -m pytest -q
+.venv\Scripts\adk web --port 8000 .
+```
+
+Open http://localhost:8000, select **travel_agent**, and start chatting.
+
+> **Windows note:** `adk web` does not auto-reload on file changes — restart it after editing code.
+
+---
+
+### Option B — Full Stack (Backend + Frontend)
+
+#### 1. Backend
+
+```bash
+cd backend
+py -3.13 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+copy .env.example .env    # fill in API keys + set AUTH_JWKS_URL=http://localhost:3000/api/auth/jwks
+
+.venv\Scripts\uvicorn app.main:app --port 8080
+```
+
+Interactive API docs: http://localhost:8080/docs (development only).
+
+#### 2. Frontend
+
+```bash
+cd frontend
+npm install
+copy .env.example .env.local   # set BETTER_AUTH_SECRET
+
+# Create auth database tables (first time only)
+npx auth@latest migrate --config lib/auth.ts -y
+
 npm run dev
 ```
 
-3. Open http://localhost:3000, create an account and start a trip.
+Open http://localhost:3000, create an account, and start planning a trip.
 
-How sign-in works: Better Auth (in the Next.js app) keeps email and password accounts in `frontend/auth.sqlite`
-and issues 15-minute EdDSA tokens. The browser sends them to FastAPI, which checks them against the
-frontend's public keys at `/api/auth/jwks` (issuer `http://localhost:3000`, audience `travel-planner-api`).
+---
 
-Frontend notes:
-- Map: MapLibre with free OpenFreeMap tiles. `npm run dev` / `npm run build` first copy MapLibre's web worker into
-  `public/maplibre/` (Turbopack does not emit it).
-- Choosing another hotel in the Hotels tab calls `PATCH /api/trips/{id}/itinerary`: the cost is recalculated in code,
-  with no AI requests.
+### Option C — PostgreSQL via Docker
 
-## Agents
-
-```
-travel_coordinator  (chats with the user, gemini-3.5-flash)
- ├─ weather_agent   single_turn → get_weather_forecast             (Open-Meteo)
- ├─ hotel_agent     single_turn → search_hotels, find_hotels_near  (LiteAPI, Geoapify)
- ├─ places_agent    single_turn → find_attractions                 (Geoapify)
- └─ plan_itinerary  tool → itinerary_agent (structured plan) → review (code) → one fix if needed
+```bash
+# From the project root:
+docker compose up -d db
 ```
 
-1. The coordinator calls the three specialists in parallel, each with the same `TripRequest`.
-2. Their raw tool data is kept in session state: `trip_request`, `weather`, `hotels`, `hotels_nearby`, `attractions`.
-3. `plan_itinerary` runs the itinerary agent on that data and checks the plan in Python
-   (`travel_agent/review.py`): exact dates, only searched places and hotels, total budget.
-   Errors go back to the agent once; rainy-day and repeat warnings are passed to the user.
-   The result is saved as `itinerary` and `itinerary_review`.
+Then set in `backend/.env`:
 
-One full planning message uses about 10 Gemini requests; the free tier allows only ~20 per model per day.
+```env
+DATABASE_URL=postgresql+asyncpg://travel:travel@localhost:5432/travel_planner
+```
+
+---
+
+## 🔌 REST API Reference
+
+All `/api/trips` endpoints require `Authorization: Bearer <token>`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/health` | Liveness check |
+| `GET` | `/api/health/ready` | Database connectivity check |
+| `POST` | `/api/auth/dev-token` | `{"user_id": "alice"}` → token (dev only) |
+| `POST` | `/api/trips` | Start a new trip (conversation) |
+| `GET` | `/api/trips` | List your trips, newest first |
+| `GET` | `/api/trips/{id}` | Messages + saved trip data (itinerary, hotels, weather) |
+| `DELETE` | `/api/trips/{id}` | Delete a trip |
+| `POST` | `/api/trips/{id}/messages` | `{"text": "..."}` → **Server-Sent Events** stream |
+| `PATCH` | `/api/trips/{id}/itinerary` | Change the chosen hotel (no AI call; cost recalculated in code) |
+
+### SSE Message Stream Events
+
+| Event | Payload | Meaning |
+|---|---|---|
+| `progress` | `{"agent": "hotel_agent"}` | A specialist or the planner started work |
+| `message` | `{"text": "..."}` | The coordinator's reply to the user |
+| `trip` | `{itinerary, hotels, weather, ...}` | Updated trip data |
+| `done` | — | Stream complete |
+| `error` | `{"code": "ai_unavailable"}` | Error during generation |
+
+Error codes: `ai_unavailable`, `ai_quota_exceeded`. Non-stream errors are JSON: `{"error": {"code": "...", "message": "..."}}`.
+
+### Rate Limits
+
+- 5 messages per user per minute, 40 per day
+- 2 000 characters per message
+- 1 concurrent message per trip (409 if another is in progress)
+- 30 model calls per message (enforced by `before_tool_callback`)
+
+---
+
+## 🔐 Authentication
+
+The frontend uses **Better Auth** (email + password) running inside the Next.js app. It issues short-lived **15-minute EdDSA JWT tokens** stored in the browser. The FastAPI backend verifies these tokens against the frontend's public keys at `/api/auth/jwks` (configured via `AUTH_JWKS_URL`). No token is stored server-side.
+
+In development, you can skip the frontend and obtain a token directly:
+
+```bash
+curl -X POST http://localhost:8080/api/auth/dev-token \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "alice"}'
+```
+
+---
+
+## 📊 Cost & Quota Notes
+
+| Fact | Detail |
+|---|---|
+| One full planning message | ~10 Gemini API requests |
+| Gemini free tier | ~20 requests/model/day |
+| Model fallback | Coordinator and specialists each have configurable fallback model lists tried in order on 503/429 |
+| Open-Meteo | Free, unlimited, no key needed |
+| LiteAPI sandbox | Returns test prices; a note is surfaced to the user |
+
+---
+
+## 🗺️ Map
+
+The interactive map uses **MapLibre GL** with **OpenFreeMap** tiles (free, no key required). The `predev` / `prebuild` npm scripts copy MapLibre's web worker into `public/maplibre/` because Turbopack does not emit it automatically.
+
+---
+
+## 📄 License & Attribution
+
+Place and attraction data is provided by **Geoapify**. Any page displaying this data must include the attribution: **Powered by Geoapify**.
